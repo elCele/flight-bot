@@ -22,7 +22,7 @@ def log(code: int, info: str = "") -> None:
     if info != "":
         msg += f" | {info}"
 
-    text = f"[{code}]-{timestamp} > {msg}"
+    text = f"[{code}]-{timestamp} > {msg}\n"
 
     if inspect.stack()[1].function == "run":
         text = "\n" + text
@@ -30,7 +30,7 @@ def log(code: int, info: str = "") -> None:
     with open(log_path, 'a', encoding='utf-8') as f:
         f.write(text)
 
-    print(text)
+    print(text, end="")
 
 def update_data(key: str, data: list[Any]) -> None:
     stored_data = {}
