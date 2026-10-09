@@ -3,6 +3,8 @@ import inspect
 import os
 import json
 from typing import Any
+from datetime import date
+import calendar
 
 data_path = os.path.join(os.getcwd(), 'src', 'flight_bot', 'data.json')
 log_path = os.path.join(os.getcwd(), 'src', 'flight_bot', 'log.txt')
@@ -42,3 +44,11 @@ def update_data(key: str, data: list[Any]) -> None:
 
     with open(data_path, 'w', encoding='utf-8') as f:
         json.dump(stored_data, f, indent=4)
+
+def next_month_dates(today=None):
+    today = today or date.today()
+    year = today.year + (today.month == 12)
+    month = today.month % 12 + 1
+    days = calendar.monthrange(year, month)[1]
+    return [f"{year}-{month:02d}-{d:02d}" for d in range(1, days + 1)]
+
