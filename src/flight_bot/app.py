@@ -5,7 +5,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 import json
 import time
 
-from flight_bot.utils import check_id, log_function, reset_json, update_data
+from flight_bot.utils import check_id, log_function, update_data
 
 # Variable definition
 
@@ -26,7 +26,6 @@ async def start(update: Update, context):
     id = update.effective_user.id
 
     if check_id(id, CHAT_ID):
-        reset_json()
         name = update.effective_user.first_name
 
         buttons = InlineKeyboardButton(
@@ -40,7 +39,6 @@ async def start(update: Update, context):
             reply_markup=keyboard
         )
 
-        update_data("name", name)
         log_function()
 
     else:

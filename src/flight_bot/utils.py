@@ -12,16 +12,6 @@ def check_id(id: int, chat_id: str) -> bool:
 def log_function() -> None:
     print(f"[{time.strftime("%Y-%m-%d %H:%M:%S")}] > Function {inspect.stack()[1].function} executed")
 
-def reset_json() -> None:
-    dict = {
-        "name":  "",
-        "airports": "",
-        "currency": ""
-    }
-
-    with open(data_path, 'w', encoding='utf-8') as f:
-        json.dump(dict, f)
-
 def update_data(key: str, data: list[Any]) -> None:
     stored_data = {}
 
@@ -31,4 +21,4 @@ def update_data(key: str, data: list[Any]) -> None:
     stored_data[key] = data
 
     with open(data_path, 'w', encoding='utf-8') as f:
-        json.dump(stored_data, f)
+        json.dump(stored_data, f, indent=4)
