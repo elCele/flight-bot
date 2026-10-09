@@ -6,6 +6,9 @@ dist/
 wheels/
 *.egg-info
 
+# json
+.json
+
 # Virtual environments
 .venv
 
