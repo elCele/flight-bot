@@ -5,12 +5,22 @@ import json
 from typing import Any
 
 data_path = os.path.join(os.getcwd(), 'src', 'flight_bot', 'data.json')
+log_path = os.path.join(os.getcwd(), 'src', 'flight_bot', 'log.txt')
 
 def check_id(id: int, chat_id: str) -> bool:
     return id == int(chat_id)
 
-def log_function() -> None:
-    print(f"[{time.strftime("%Y-%m-%d %H:%M:%S")}] > Function {inspect.stack()[1].function} executed")
+def log(code: int) -> None:
+    msg = ""
+    timestamp = f"[{time.strftime("%Y-%m-%d %H:%M:%S")}]"
+
+    if code == 0:   # success
+        msg = f"Function {inspect.stack()[1].function} operated as expected"
+    elif code == 1: # error
+        msg = f"Error in {inspect.stack()[1].function} function"
+
+    with open(log_path, 'a', encoding='utf-8') as f:
+        f.write(f"[{code}] {timestamp} > {msg}")
 
 def update_data(key: str, data: list[Any]) -> None:
     stored_data = {}

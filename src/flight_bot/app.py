@@ -5,7 +5,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 import json
 import time
 
-from flight_bot.utils import check_id, log_function, update_data
+from flight_bot.utils import check_id, log, update_data
 
 # Variable definition
 
@@ -22,7 +22,7 @@ async def start(update: Update, context):
 
         await update.message.reply_text(f"Ciao {name}!\nBenvenuto nella ricerca dei viaggi a poco prezzo!")
 
-        log_function()
+        log(0)
 
     else:
         print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] > Blocked access from {id}")
@@ -35,8 +35,8 @@ async def help(update: Update, context):
 
         await update.message.reply_text(text)
 
-        log_function()
-    else: print(f"[{time.strftime("%Y-%m-%d %H:%M:%S")}] > Blocked access from {id}")
+        log(0)
+    else: log(1)
 
 def run():
     # Create the app for the bot with the token
