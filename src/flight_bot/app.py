@@ -43,7 +43,6 @@ def run():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     # Add the handlers
-    app.add_handler(CallbackQueryHandler(btns_handler))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help))
 
