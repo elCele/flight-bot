@@ -10,7 +10,7 @@ log_path = os.path.join(os.getcwd(), 'src', 'flight_bot', 'log.txt')
 def check_id(id: int, chat_id: str) -> bool:
     return id == int(chat_id)
 
-def log(code: int) -> None:
+def log(code: int, info: str = "") -> None:
     msg = ""
     timestamp = f"[{time.strftime("%Y-%m-%d %H:%M:%S")}]"
 
@@ -19,8 +19,18 @@ def log(code: int) -> None:
     elif code == 1: # error
         msg = f"Error in {inspect.stack()[1].function} function"
 
+    if info != "":
+        msg += f" | {info}"
+
+    text = f"[{code}]-{timestamp} > {msg}"
+
+    if inspect.stack()[1].function == "run":
+        text = "\n" + text
+
     with open(log_path, 'a', encoding='utf-8') as f:
-        f.write(f"[{code}] {timestamp} > {msg}")
+        f.write(text)
+
+    print(text)
 
 def update_data(key: str, data: list[Any]) -> None:
     stored_data = {}

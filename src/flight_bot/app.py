@@ -36,7 +36,7 @@ async def help(update: Update, context):
         await update.message.reply_text(text)
 
         log(0)
-    else: log(1)
+    else: log(1, "ID not recognized")
 
 def run():
     # Create the app for the bot with the token
@@ -47,5 +47,5 @@ def run():
     app.add_handler(CommandHandler("help", help))
 
     # Start the polling waiting
-    print(f"[{time.strftime("%Y-%m-%d %H:%M:%S")}] > Bot ready for messages ...")
+    log(0, "Bot ready for messages ...")
     app.run_polling()
