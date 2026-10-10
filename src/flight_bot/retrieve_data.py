@@ -1,6 +1,7 @@
 import serpapi
 import os
 import json
+from datetime import date as dt
 from dotenv import load_dotenv
 from flight_bot.utils import data_path, next_month_dates
 
@@ -14,7 +15,11 @@ month_date = next_month_dates()
 with open(data_path, 'r', encoding='utf-8') as f:
     data = json.load(f)
 
-data['flights'] = {}
+if not isinstance(data.get('flights'), dict):
+    data['flights'] = {}
+
+today = dt.today().isoformat()
+data['flights'] = {d: fl for d, fl in data['flights'].items() if d >= today}
 
 for i, date in enumerate(month_date, 1):
     print(f"[{i}/{len(month_date)}] {date}...", end=" ", flush=True)
