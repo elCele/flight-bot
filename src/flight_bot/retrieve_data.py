@@ -15,32 +15,72 @@ month_date = next_month_dates()
 with open(data_path, 'r', encoding='utf-8') as f:
     data = json.load(f)
 
+TEST = False
+
+if TEST:
+    ids = data['arrival_id'].split(',')
+    airports = ids[1:]
+
+    base = {
+        "engine": "google_flights",
+        "departure_id": data['departure_id'],
+        "outbound_date": "2026-11-01",
+        "type": 2,
+        "currency": data['currency'],
+        "sort_by": 2,
+        "max_price": data['max_price'],
+        "stops": 1
+    }
+
+    tests = {
+        "10 aeroporti": ",".join(airports[:10]),
+        "11 aeroporti": ",".join(airports),
+        "LWN solo": "LWN",
+        "10 senza LWN + ultimo": ",".join(airports[:9] + [airports[10]]),
+    }
+
+    for name, arr in tests.items():
+        r = client.search({**base, "arrival_id": arr}).as_dict()
+        found = r.get('best_flights', []) + r.get('other_flights', [])
+        print(name, '->', len(found), [x['price'] for x in found], r.get('error', ''))
+
+    raise SystemExit
+
 if not isinstance(data.get('flights'), dict):
     data['flights'] = {}
 
 today = dt.today().isoformat()
 data['flights'] = {d: fl for d, fl in data['flights'].items() if d >= today}
 
+ids = data['arrival_id'].split(',')
+airports = ids[1:]
+chunks = [ids[0]] + [",".join(airports[i:i + 10]) for i in range(0, len(airports), 10)]
+
 for i, date in enumerate(month_date, 1):
     print(f"[{i}/{len(month_date)}] {date}...", end=" ", flush=True)
 
-    results = client.search({
-        "engine": "google_flights",
-        "departure_id": data['departure_id'],
-        "arrival_id": data['arrival_id'],
-        "outbound_date": date,
-        "type": 2,
-        "currency": data['currency'],
-        "sort_by": 2,
-        "max_price": data['max_price']
-    }).as_dict()
+    found = []
+    for arr in chunks:
+        results = client.search({
+            "engine": "google_flights",
+            "departure_id": data['departure_id'],
+            "arrival_id": arr,
+            "outbound_date": date,
+            "type": 2,
+            "currency": data['currency'],
+            "sort_by": 2,
+            "max_price": data['max_price']
+        }).as_dict()
+        found += results.get('best_flights', []) + results.get('other_flights', [])
 
-    found = results.get('best_flights', []) + results.get('other_flights', [])
-    print(f"{len(found)} voli")
-
+    seen = set()
     day_flights = []
     for fl in found:
         flight_data = fl['flights'][0]
+        key = (flight_data['flight_number'], flight_data['departure_airport']['time'])
+        if key in seen:
+            continue
+        seen.add(key)
         day_flights.append({
             'flight_number': flight_data['flight_number'],
             'airline': flight_data['airline'],
@@ -52,7 +92,9 @@ for i, date in enumerate(month_date, 1):
             'duration': flight_data['duration']
         })
 
+    day_flights.sort(key=lambda x: x['price'])
     data['flights'][date] = day_flights
+    print(f"{len(day_flights)} voli")
 
     with open(data_path, 'w', encoding='utf-8') as fp:
         json.dump(data, fp, indent=4)
