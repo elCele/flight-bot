@@ -9,6 +9,9 @@ wheels/
 # Log files
 log.txt
 
+# Data files
+.json
+
 # Virtual environments
 .venv
 
