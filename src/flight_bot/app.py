@@ -55,6 +55,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.edit_message_text("️️️👨🏼‍✈️️ Ecco a te le compagnie disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
 
+    log(0, query.data)
+
 # Command functions
 async def start(update: Update, context):
     user_id = update.effective_user.id
@@ -120,7 +122,7 @@ async def get_filters(update: Update, context):
     
     log(0)
 
-async def show_flights(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def search_flights(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
     if not check_id(user_id, CHAT_ID):
@@ -146,7 +148,7 @@ def run():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help))
     app.add_handler(CommandHandler("filters", get_filters))
-    app.add_handler(CommandHandler("search", show_flights))
+    app.add_handler(CommandHandler("search", search_flights))
 
     # Add the button handler
     app.add_handler(CallbackQueryHandler(button_handler))
