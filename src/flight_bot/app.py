@@ -81,7 +81,8 @@ async def help(update: Update, context):
     text = (
         "🔹️ /start - Fa partire il bot\n"
         "🔹️ /help - Mostra questa lista di comandi\n"
-        "🔹️ /filters - Mostra la lista di filtri su cui si basa la ricerca"
+        "🔹️ /filters - Mostra la lista di filtri su cui si basa la ricerca\n",
+        "🔹️ /search - Fa partire la ricerca"
     )
 
     await update.message.reply_text(text)
@@ -95,32 +96,36 @@ async def get_filters(update: Update, context):
         log(1, "ID not recognized")
         return
 
-    with open(data_path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+    try:
+        with open(data_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
 
-    rows = [
-        ("🛫", "Partenza", data['departure_id']),
-        ("🛬", "Arrivo", data['arrival_id']),
-        ("💰", "Prezzo max", f"{data['max_price']} {data['currency']}"),
-    ]
+        rows = [
+            ("🛫", "Partenza", data['departure_id']),
+            ("🛬", "Arrivo", data['arrival_id']),
+            ("💰", "Prezzo max", f"{data['max_price']} {data['currency']}"),
+        ]
 
-    label_w = max(len(l) for _, l, _ in rows) + 3
-    val_w = max(len(v) for _, _, v in rows)
+        label_w = max(len(l) for _, l, _ in rows) + 3
+        val_w = max(len(v) for _, _, v in rows)
 
-    lines = []
-    for emoji, label, value in rows:
-        left = f"{emoji} {label}"
-        left_w = len(label) + 3
-        lines.append(f"{left}{' ' * (label_w - left_w)}  {value.rjust(val_w)}")
+        lines = []
+        for emoji, label, value in rows:
+            left = f"{emoji} {label}"
+            left_w = len(label) + 3
+            lines.append(f"{left}{' ' * (label_w - left_w)}  {value.rjust(val_w)}")
 
-    text = (
-        "✈️ <b>FILTRI RICERCA VOLO</b>\n"
-        f"<pre>{html.escape(chr(1).join(lines))}</pre>"
-    )
+        text = (
+            "✈️ <b>FILTRI RICERCA VOLO</b>\n"
+            f"<pre>{html.escape(chr(1).join(lines))}</pre>"
+        )
 
-    await update.message.reply_text(text, parse_mode="HTML")
-    
-    log(0)
+        await update.message.reply_text(text, parse_mode="HTML")
+        
+        log(0)
+    except Exception as e:
+        log(1, e)
+        return
 
 async def search_flights(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -129,16 +134,20 @@ async def search_flights(update: Update, context: ContextTypes.DEFAULT_TYPE):
         log(1, "ID not recognized")
         return
 
-    keyboard = [
-        [InlineKeyboardButton("🗓️ Cerca per data", callback_data="search_by_date")],
-        [InlineKeyboardButton("🛫 Cerca per partenza", callback_data="search_by_departure")],
-        [InlineKeyboardButton("🛬 Cerca per destinazione", callback_data="search_by_arrival")],
-        [InlineKeyboardButton("👨🏼‍✈️️ Cerca per compagnia", callback_data="search_by_airline")]
-    ]
+    try:
+        keyboard = [
+            [InlineKeyboardButton("🗓️ Cerca per data", callback_data="search_by_date")],
+            [InlineKeyboardButton("🛫 Cerca per partenza", callback_data="search_by_departure")],
+            [InlineKeyboardButton("🛬 Cerca per destinazione", callback_data="search_by_arrival")],
+            [InlineKeyboardButton("👨🏼‍✈️️ Cerca per compagnia", callback_data="search_by_airline")]
+        ]
 
-    await update.message.reply_text("Scegli tra queste opzioni di ricerca", reply_markup=InlineKeyboardMarkup(keyboard))
+        await update.message.reply_text("Scegli tra queste opzioni di ricerca", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    log(0)
+        log(0)
+    except Exception as e:
+        log(1, e)
+        return
 
 def run():
     # Create the app for the bot with the token
