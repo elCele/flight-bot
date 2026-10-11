@@ -1,12 +1,12 @@
 import os
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 import json
 import html
 from math import floor
 
-from flight_bot.utils import check_id, log, update_data, data_path, get_flights_by
+from flight_bot.utils import *
 
 # Retrieve .env info
 load_dotenv()
@@ -18,7 +18,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    if query.data == "return_to_menu":
+    # query.data for /search
+    if query.data == "return_to_menu_search":
         keyboard = [
             [InlineKeyboardButton("🗓️ Cerca per data", callback_data="search_by_date_0")],
             [InlineKeyboardButton("🛫 Cerca per partenza", callback_data="search_by_departure")],
@@ -63,7 +64,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             *[[InlineKeyboardButton(f"🗓️ {d}", callback_data=f"date_{d}")] for d in to_show],
             navigation_buttons,
-            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu")]
+            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]
         ]
 
         await query.edit_message_text(
@@ -73,28 +74,113 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif query.data == "search_by_departure":
         keyboard = [
-            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu")]
+            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]
         ]
 
         await query.edit_message_text("🛫 Ecco a te gli aeroporti di partenza disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif query.data == "search_by_arrival":
         keyboard = [
-            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu")]
+            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]
         ]
 
         await query.edit_message_text("🛬 Ecco a te le destinazioni disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif query.data == "search_by_airline":
         keyboard = [
-            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu")]
+            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]
         ]
 
         await query.edit_message_text("️️️👨🏼‍✈️️ Ecco a te le compagnie disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
 
+    # query.data for /filters
+    elif query.data == "return_to_menu_filters":
+        with open(data_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        text = (
+            f"🛫 <b>Partenze:</b> {', '.join(data['departure_id'].split(','))}\n\n"
+            f"🛬 <b>Arrivi:</b> {', '.join(data['arrival_id'].split(','))}\n\n"
+            f"💰 <b>Prezzo max:</b> {data['max_price']} {data['currency']}"
+        )
+        
+        keyboard = [
+            [InlineKeyboardButton("💰 Modifica prezzo", callback_data="update_max_price")]
+        ]
+        
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif query.data == "update_max_price":
+        context.user_data['current_state'] = "waiting_max_price"
+        context.user_data['menu_message_id'] = query.message.message_id
+
+        keyboard = [
+            [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
+        ]
+
+        await query.edit_message_text("Scrivi il nuovo prezzo massimo:", reply_markup=InlineKeyboardMarkup(keyboard))
+
     log(0, query.data)
 
-# Command functions
+# User messagge handler function
+# User messagge handler function
+async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    state = context.user_data.get("current_state")
+
+    if state == "waiting_max_price":
+        new_max_price = update.message.text.strip()
+        chat_id = update.effective_chat.id
+        menu_msg_id = context.user_data.get("menu_message_id")
+
+        # 1. Eliminiamo il messaggio scritto dall'utente per pulire la chat
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+
+        try:
+            update_data('max_price', new_max_price)
+
+            with open(data_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            text = (
+                f"✅ <b>Prezzo aggiornato con successo!</b>\n\n"
+                f"🛫 <b>Partenze:</b> {', '.join(data['departure_id'].split(','))}\n\n"
+                f"🛬 <b>Arrivi:</b> {', '.join(data['arrival_id'].split(','))}\n\n"
+                f"💰 <b>Prezzo max:</b> {data['max_price']} {data['currency']}"
+            )
+            
+            keyboard = [
+                [InlineKeyboardButton("💰 Modifica prezzo", callback_data="update_max_price")]
+            ]
+
+            if menu_msg_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=menu_msg_id,
+                    text=text,
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+
+        except Exception as e:
+            log(1, f"Errore salvataggio prezzo: {e}")
+            if menu_msg_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=menu_msg_id,
+                    text="❌ Si è verificato un errore durante il salvataggio del prezzo."
+                )
+
+        context.user_data.pop("current_state", None)
+        context.user_data.pop("menu_message_id", None)
+        
+    else:
+        await update.message.reply_text("Usa i pulsanti o i comandi suggeriti per interagire con il bot")
+
+
+# Commands functions
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -137,27 +223,17 @@ async def get_filters(update: Update, context: ContextTypes.DEFAULT_TYPE):      
         with open(data_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
-        rows = [
-            ("🛫", "Partenza", data['departure_id']),
-            ("🛬", "Arrivo", data['arrival_id']),
-            ("💰", "Prezzo max", f"{data['max_price']} {data['currency']}"),
-        ]
-
-        label_w = max(len(l) for _, l, _ in rows) + 3
-        val_w = max(len(v) for _, _, v in rows)
-
-        lines = []
-        for emoji, label, value in rows:
-            left = f"{emoji} {label}"
-            left_w = len(label) + 3
-            lines.append(f"{left}{' ' * (label_w - left_w)}  {value.rjust(val_w)}")
-
         text = (
-            "✈️ <b>FILTRI RICERCA VOLO</b>\n"
-            f"<pre>{html.escape(chr(1).join(lines))}</pre>"
+            f"🛫 <b>Partenze:</b> {', '.join(data['departure_id'].split(','))}\n\n"
+            f"🛬 <b>Arrivi:</b> {', '.join(data['arrival_id'].split(','))}\n\n"
+            f"💰 <b>Prezzo max:</b> {data['max_price']} {data['currency']}"
         )
 
-        await update.message.reply_text(text, parse_mode="HTML")
+        keyboard = [
+            [InlineKeyboardButton("💰 Modifica prezzo", callback_data="update_max_price")]
+        ]
+
+        await update.message.reply_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
         
         log(0)
     except Exception as e:
@@ -198,6 +274,10 @@ def run():
 
     # Add the button handler
     app.add_handler(CallbackQueryHandler(button_handler))
+
+    # Add the message handler
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+
 
     # Start the polling waiting
     log(0, "Bot ready for messages ...")

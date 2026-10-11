@@ -2,7 +2,7 @@
     "departure_id": "MXP,TRN,BGY",
     "arrival_id": "/m/02j9z,RAK,FEZ,AGA,HRG,SSH,SPX,KUT,TBS,BUS,EVN",
     "currency": "EUR",
-    "max_price": 60,
+    "max_price": "60",
     "flights": {
         "2026-11-01": [
             {
