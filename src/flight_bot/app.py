@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 import json
 import html
 
@@ -12,10 +12,54 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
+# Buttons handler function
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "return_to_menu":
+        keyboard = [
+            [InlineKeyboardButton("🗓️ Cerca per data", callback_data="search_by_date")],
+            [InlineKeyboardButton("🛫 Cerca per partenza", callback_data="search_by_departure")],
+            [InlineKeyboardButton("🛬 Cerca per destinazione", callback_data="search_by_arrival")],
+            [InlineKeyboardButton("👨🏼‍✈️️ Cerca per compagnia", callback_data="search_by_airline")]
+        ]
+        
+        await query.edit_message_text("Scegli tra queste opzioni di ricerca", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif query.data == "search_by_date":
+        keyboard = [
+            [InlineKeyboardButton("Torna al menù", callback_data="return_to_menu")]
+        ]
+
+        await query.edit_message_text("🗓️ Ecco a te le date disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif query.data == "search_by_departure":
+        keyboard = [
+            [InlineKeyboardButton("Torna al menù", callback_data="return_to_menu")]
+        ]
+
+        await query.edit_message_text("🛫 Ecco a te gli aeroporti di partenza disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif query.data == "search_by_arrival":
+        keyboard = [
+            [InlineKeyboardButton("Torna al menù", callback_data="return_to_menu")]
+        ]
+
+        await query.edit_message_text("🛬 Ecco a te le destinazioni disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif query.data == "search_by_airline":
+        keyboard = [
+            [InlineKeyboardButton("Torna al menù", callback_data="return_to_menu")]
+        ]
+
+        await query.edit_message_text("️️️👨🏼‍✈️️ Ecco a te le compagnie disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
+
+# Command functions
 async def start(update: Update, context):
     user_id = update.effective_user.id
 
-    if not check_id(id, CHAT_ID):
+    if not check_id(user_id, CHAT_ID):
         log(1, "ID not recognized")
         return
     
@@ -26,9 +70,9 @@ async def start(update: Update, context):
     log(0)
 
 async def help(update: Update, context):
-    id = update.effective_user.id
+    user_id = update.effective_user.id
 
-    if not check_id(id, CHAT_ID):
+    if not check_id(user_id, CHAT_ID):
         log(1, "ID not recognized")
         return
 
@@ -76,6 +120,24 @@ async def get_filters(update: Update, context):
     
     log(0)
 
+async def show_flights(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    
+    if not check_id(user_id, CHAT_ID):
+        log(1, "ID not recognized")
+        return
+
+    keyboard = [
+        [InlineKeyboardButton("🗓️ Cerca per data", callback_data="search_by_date")],
+        [InlineKeyboardButton("🛫 Cerca per partenza", callback_data="search_by_departure")],
+        [InlineKeyboardButton("🛬 Cerca per destinazione", callback_data="search_by_arrival")],
+        [InlineKeyboardButton("👨🏼‍✈️️ Cerca per compagnia", callback_data="search_by_airline")]
+    ]
+
+    await update.message.reply_text("Scegli tra queste opzioni di ricerca", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    log(0)
+
 def run():
     # Create the app for the bot with the token
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -84,6 +146,10 @@ def run():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help))
     app.add_handler(CommandHandler("filters", get_filters))
+    app.add_handler(CommandHandler("search", show_flights))
+
+    # Add the button handler
+    app.add_handler(CallbackQueryHandler(button_handler))
 
     # Start the polling waiting
     log(0, "Bot ready for messages ...")
