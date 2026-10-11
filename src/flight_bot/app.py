@@ -123,7 +123,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log(0, query.data)
 
 # User messagge handler function
-# User messagge handler function
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.user_data.get("current_state")
 
@@ -179,6 +178,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("Usa i pulsanti o i comandi suggeriti per interagire con il bot")
 
+    log(0, state)
 
 # Commands functions
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
