@@ -136,7 +136,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("Scrivi il codice IATA dell'aeroporto da inserire", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif query.data == "remove_departure_id":
-        pass
+        context.user_data['current_state'] = "waiting_remove_departure_id"
+        context.user_data['menu_message_id'] = query.message.message_id
+        
+        keyboard = [
+            [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
+        ]
+        
+        await query.edit_message_text("Scrivi il codice IATA dell'aeroporto da rimuovere", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif query.data == "update_max_price":
         context.user_data['current_state'] = "waiting_max_price"
@@ -263,6 +270,68 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     chat_id=chat_id,
                     message_id=menu_msg_id,
                     text="Si è verificato un errore durante l'aggiunta dell'aeroporto",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+
+        context.user_data.pop("current_state", None)
+        context.user_data.pop("menu_message_id", None)
+
+    elif state == "waiting_remove_departure_id":
+        iata_to_remove = update.message.text.strip()
+        chat_id = update.effective_chat.id
+        menu_msg_id = context.user_data.get("menu_message_id")
+
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+
+        try:
+            with open(data_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            departure_id = data['departure_id'].split(',')
+
+            if iata_to_remove in departure_id:
+                departure_id.remove(iata_to_remove)
+
+            update_data('departure_id', ','.join(departure_id))
+
+            with open(data_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            text = (
+                f"🛫 <b>Partenze:</b> {', '.join(data['departure_id'].split(','))}\n\n"
+                f"🛬 <b>Arrivi:</b> {', '.join(data['arrival_id'].split(','))}\n\n"
+                f"💰 <b>Prezzo max:</b> {data['max_price']} {data['currency']}"
+            )
+
+            keyboard = [
+                [InlineKeyboardButton("🛫 Modifica partenze", callback_data="update_departure_id")],
+                [InlineKeyboardButton("🛬 Modifica arrivi", callback_data="update_arrival_id")],
+                [InlineKeyboardButton("💰 Modifica prezzo", callback_data="update_max_price")]
+            ]
+
+            if menu_msg_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=menu_msg_id,
+                    text=text,
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+
+        except Exception as e:
+            log(1, e)
+            if menu_msg_id:
+                keyboard = [
+                    [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
+                ]
+
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=menu_msg_id,
+                    text="Lo IATA indicato non è presente, controllare l'ortografia",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
 
