@@ -4,8 +4,9 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 import json
 import html
+from math import floor
 
-from flight_bot.utils import check_id, log, update_data, data_path
+from flight_bot.utils import check_id, log, update_data, data_path, get_flights_by
 
 # Retrieve .env info
 load_dotenv()
@@ -19,7 +20,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "return_to_menu":
         keyboard = [
-            [InlineKeyboardButton("🗓️ Cerca per data", callback_data="search_by_date")],
+            [InlineKeyboardButton("🗓️ Cerca per data", callback_data="search_by_date_0")],
             [InlineKeyboardButton("🛫 Cerca per partenza", callback_data="search_by_departure")],
             [InlineKeyboardButton("🛬 Cerca per destinazione", callback_data="search_by_arrival")],
             [InlineKeyboardButton("👨🏼‍✈️️ Cerca per compagnia", callback_data="search_by_airline")]
@@ -27,30 +28,66 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await query.edit_message_text("Scegli tra queste opzioni di ricerca", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    elif query.data == "search_by_date":
+    elif query.data.startswith("search_by_date_"):
+        flights = get_flights_by('date')
+
+        possible_date = list(flights.keys())
+
+        index = 5
+        page = int(query.data.split('_')[-1])
+        max_page = floor(len(possible_date) / index)
+
+        navigation_buttons = []
+
+        if page == 1:
+            navigation_buttons = [InlineKeyboardButton("➡️", callback_data=f"search_by_date_{page + 1}")]
+        elif page == max_page:
+            navigation_buttons = [InlineKeyboardButton("⬅️", callback_data=f"search_by_date_{page - 1}")]
+        else:
+            navigation_buttons = [
+                InlineKeyboardButton("⬅️", callback_data=f"search_by_date_{page - 1}"),
+                InlineKeyboardButton("➡️", callback_data=f"search_by_date_{page + 1}")
+            ]
+
+        start_point = (page - 1) * index
+        end_point = start_point + index
+
+        while True:
+            try:
+                to_show = possible_date[start_point:end_point]
+                break
+            except IndexError:
+                end_point -= 1
+                continue
+
         keyboard = [
-            [InlineKeyboardButton("Torna al menù", callback_data="return_to_menu")]
+            *[[InlineKeyboardButton(f"🗓️ {d}", callback_data=f"date_{d}")] for d in to_show],
+            navigation_buttons,
+            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu")]
         ]
 
-        await query.edit_message_text("🗓️ Ecco a te le date disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.edit_message_text(
+            f"🗓️ Ecco a te le date disponibili - pagina {page}/{max_page}",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
     elif query.data == "search_by_departure":
         keyboard = [
-            [InlineKeyboardButton("Torna al menù", callback_data="return_to_menu")]
+            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu")]
         ]
 
         await query.edit_message_text("🛫 Ecco a te gli aeroporti di partenza disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif query.data == "search_by_arrival":
         keyboard = [
-            [InlineKeyboardButton("Torna al menù", callback_data="return_to_menu")]
+            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu")]
         ]
 
         await query.edit_message_text("🛬 Ecco a te le destinazioni disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif query.data == "search_by_airline":
         keyboard = [
-            [InlineKeyboardButton("Torna al menù", callback_data="return_to_menu")]
+            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu")]
         ]
 
         await query.edit_message_text("️️️👨🏼‍✈️️ Ecco a te le compagnie disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -136,7 +173,7 @@ async def search_flights(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         keyboard = [
-            [InlineKeyboardButton("🗓️ Cerca per data", callback_data="search_by_date")],
+            [InlineKeyboardButton("🗓️ Cerca per data", callback_data="search_by_date_1")],
             [InlineKeyboardButton("🛫 Cerca per partenza", callback_data="search_by_departure")],
             [InlineKeyboardButton("🛬 Cerca per destinazione", callback_data="search_by_arrival")],
             [InlineKeyboardButton("👨🏼‍✈️️ Cerca per compagnia", callback_data="search_by_airline")]

@@ -52,3 +52,21 @@ def next_month_dates(today=None):
     days = calendar.monthrange(year, month)[1]
     return [f"{year}-{month:02d}-{d:02d}" for d in range(1, days + 1)]
 
+def get_flights_by(by: str) -> dict:
+    if by not in ('date', 'departure_id', 'arrival_id', 'airline'):
+        raise ValueError(f"Ordine non valido: {by}")
+
+    with open(data_path, 'r', encoding='utf-8') as f:
+        flights = json.load(f).get('flights', {})
+
+    groups = {}
+
+    for date, day in flights.items():
+        for fl in day:
+            key = date if by == 'date' else fl[by]
+            groups.setdefault(key, []).append({**fl, 'date': date})
+
+    for lst in groups.values():
+        lst.sort(key=lambda x: (x['price'], x['date'], x['departure_time']))
+
+    return dict(sorted(groups.items()))
