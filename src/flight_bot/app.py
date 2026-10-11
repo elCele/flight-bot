@@ -105,10 +105,31 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         keyboard = [
+            [InlineKeyboardButton("🛫 Modifica partenze", callback_data="update_departure_id")],
+            [InlineKeyboardButton("🛬 Modifica arrivi", callback_data="update_arrival_id")],
             [InlineKeyboardButton("💰 Modifica prezzo", callback_data="update_max_price")]
         ]
         
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif query.data == "update_departure_id":
+        context.user_data['menu_message_id'] = query.message.message_id
+
+        keyboard = [
+            [
+                [InlineKeyboardButton("➕️ Aggiungi", callback_data="add_departure_id")],
+                [InlineKeyboardButton("➖️ Rimuovi", callback_data="remove_departure_id")]
+            ],
+            [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
+        ]
+
+        await query.edit_message_text("Scrivi il nuovo prezzo massimo:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif query.data == "add_departure_id":
+        pass
+
+    elif query.data == "remove_departure_id":
+        pass
 
     elif query.data == "update_max_price":
         context.user_data['current_state'] = "waiting_max_price"
@@ -131,26 +152,26 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
         menu_msg_id = context.user_data.get("menu_message_id")
 
-        # 1. Eliminiamo il messaggio scritto dall'utente per pulire la chat
         try:
             await update.message.delete()
         except Exception:
             pass
 
         try:
-            update_data('max_price', new_max_price)
+            update_data('max_price', float(new_max_price))
 
             with open(data_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
             text = (
-                f"✅ <b>Prezzo aggiornato con successo!</b>\n\n"
                 f"🛫 <b>Partenze:</b> {', '.join(data['departure_id'].split(','))}\n\n"
                 f"🛬 <b>Arrivi:</b> {', '.join(data['arrival_id'].split(','))}\n\n"
                 f"💰 <b>Prezzo max:</b> {data['max_price']} {data['currency']}"
             )
             
             keyboard = [
+                [InlineKeyboardButton("🛫 Modifica partenze", callback_data="update_departure_id")],
+                [InlineKeyboardButton("🛬 Modifica arrivi", callback_data="update_arrival_id")],
                 [InlineKeyboardButton("💰 Modifica prezzo", callback_data="update_max_price")]
             ]
 
@@ -164,12 +185,17 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
 
         except Exception as e:
-            log(1, f"Errore salvataggio prezzo: {e}")
+            log(1, e)
             if menu_msg_id:
+                keyboard = [
+                    [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
+                ]
+
                 await context.bot.edit_message_text(
                     chat_id=chat_id,
                     message_id=menu_msg_id,
-                    text="❌ Si è verificato un errore durante il salvataggio del prezzo."
+                    text="Si è verificato un errore durante il salvataggio del prezzo.",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
                 )
 
         context.user_data.pop("current_state", None)
@@ -230,6 +256,8 @@ async def get_filters(update: Update, context: ContextTypes.DEFAULT_TYPE):      
         )
 
         keyboard = [
+            [InlineKeyboardButton("🛫 Modifica partenze", callback_data="update_departure_id")],
+            [InlineKeyboardButton("🛬 Modifica arrivi", callback_data="update_arrival_id")],
             [InlineKeyboardButton("💰 Modifica prezzo", callback_data="update_max_price")]
         ]
 
