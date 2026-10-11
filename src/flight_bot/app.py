@@ -58,7 +58,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     log(0, query.data)
 
 # Command functions
-async def start(update: Update, context):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if not check_id(user_id, CHAT_ID):
@@ -71,7 +71,7 @@ async def start(update: Update, context):
 
     log(0)
 
-async def help(update: Update, context):            # fix the output layout
+async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):            # fix the output layout
     user_id = update.effective_user.id
 
     if not check_id(user_id, CHAT_ID):
@@ -89,7 +89,7 @@ async def help(update: Update, context):            # fix the output layout
 
     log(0)
 
-async def get_filters(update: Update, context):         # fix the output layout
+async def get_filters(update: Update, context: ContextTypes.DEFAULT_TYPE):         # fix the output layout
     user_id = update.effective_user.id
 
     if not check_id(user_id, CHAT_ID):
