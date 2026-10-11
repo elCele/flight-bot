@@ -117,16 +117,23 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = [
             [
-                [InlineKeyboardButton("➕️ Aggiungi", callback_data="add_departure_id")],
-                [InlineKeyboardButton("➖️ Rimuovi", callback_data="remove_departure_id")]
+                InlineKeyboardButton("➕️ Aggiungi", callback_data="add_departure_id"),
+                InlineKeyboardButton("➖️ Rimuovi", callback_data="remove_departure_id")
             ],
             [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
         ]
 
-        await query.edit_message_text("Scrivi il nuovo prezzo massimo:", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.edit_message_text("Scegli l'azione da eseguire", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif query.data == "add_departure_id":
-        pass
+        context.user_data['current_state'] = "waiting_add_departure_id"
+        context.user_data['menu_message_id'] = query.message.message_id
+
+        keyboard = [
+            [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
+        ]
+        
+        await query.edit_message_text("Scrivi il codice IATA dell'aeroporto da inserire", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif query.data == "remove_departure_id":
         pass
@@ -194,13 +201,74 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await context.bot.edit_message_text(
                     chat_id=chat_id,
                     message_id=menu_msg_id,
-                    text="Si è verificato un errore durante il salvataggio del prezzo.",
+                    text="Si è verificato un errore durante il salvataggio del prezzo",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
 
         context.user_data.pop("current_state", None)
         context.user_data.pop("menu_message_id", None)
-        
+
+    elif state == "waiting_add_departure_id":
+        new_iata = update.message.text.strip()
+        chat_id = update.effective_chat.id
+        menu_msg_id = context.user_data.get("menu_message_id")
+
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+
+        try:
+            with open(data_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            departure_id = data['departure_id'].split(',')
+
+            departure_id.append(new_iata)
+
+            update_data('departure_id', ','.join(departure_id))
+
+            with open(data_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            text = (
+                f"🛫 <b>Partenze:</b> {', '.join(data['departure_id'].split(','))}\n\n"
+                f"🛬 <b>Arrivi:</b> {', '.join(data['arrival_id'].split(','))}\n\n"
+                f"💰 <b>Prezzo max:</b> {data['max_price']} {data['currency']}"
+            )
+            
+            keyboard = [
+                [InlineKeyboardButton("🛫 Modifica partenze", callback_data="update_departure_id")],
+                [InlineKeyboardButton("🛬 Modifica arrivi", callback_data="update_arrival_id")],
+                [InlineKeyboardButton("💰 Modifica prezzo", callback_data="update_max_price")]
+            ]
+            
+            if menu_msg_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=menu_msg_id,
+                    text=text,
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+
+        except Exception as e:
+            log(1, e)
+            if menu_msg_id:
+                keyboard = [
+                    [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
+                ]
+    
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=menu_msg_id,
+                    text="Si è verificato un errore durante l'aggiunta dell'aeroporto",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+
+        context.user_data.pop("current_state", None)
+        context.user_data.pop("menu_message_id", None)
+    
     else:
         await update.message.reply_text("Usa i pulsanti o i comandi suggeriti per interagire con il bot")
 
