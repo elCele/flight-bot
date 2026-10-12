@@ -18,7 +18,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    # query.data for /search
+    # ======= SEARCH =======
     if query.data == "return_to_menu_search":
         keyboard = [
             [InlineKeyboardButton("🗓️ Cerca per data", callback_data="search_by_date_0")],
@@ -93,7 +93,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.edit_message_text("️️️👨🏼‍✈️️ Ecco a te le compagnie disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    # query.data for /filters
+    # ======= FILTERS =======
     elif query.data == "return_to_menu_filters":
         with open(data_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -112,6 +112,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
 
+    # ------- Departures -------
     elif query.data == "update_departure_id":
         context.user_data['menu_message_id'] = query.message.message_id
 
@@ -363,7 +364,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     log(0)
 
-async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):            # fix the output layout
+async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if not check_id(user_id, CHAT_ID):
@@ -381,7 +382,7 @@ async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):            #
 
     log(0)
 
-async def get_filters(update: Update, context: ContextTypes.DEFAULT_TYPE):         # fix the output layout
+async def get_filters(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if not check_id(user_id, CHAT_ID):
