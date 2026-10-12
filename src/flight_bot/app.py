@@ -384,6 +384,135 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop("current_state", None)
         context.user_data.pop("menu_message_id", None)
     
+    elif state == "waiting_add_arrival_id":
+        new_iata = update.message.text.strip()
+        chat_id = update.effective_chat.id
+        menu_msg_id = context.user_data.get("menu_message_id")
+
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+
+        try:
+            with open(data_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            arrival_id = data['arrival_id'].split(',')
+
+            arrival_id.append(new_iata)
+
+            update_data('arrival_id', ','.join(arrival_id))
+
+            with open(data_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            text = (
+                f"🛫 <b>Partenze:</b> {', '.join(data['departure_id'].split(','))}\n\n"
+                f"🛬 <b>Arrivi:</b> {', '.join(data['arrival_id'].split(','))}\n\n"
+                f"💰 <b>Prezzo max:</b> {data['max_price']} {data['currency']}"
+            )
+            
+            keyboard = [
+                [InlineKeyboardButton("🛫 Modifica partenze", callback_data="update_departure_id")],
+                [InlineKeyboardButton("🛬 Modifica arrivi", callback_data="update_arrival_id")],
+                [InlineKeyboardButton("💰 Modifica prezzo", callback_data="update_max_price")]
+            ]
+            
+            if menu_msg_id:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=menu_msg_id,
+                    text=text,
+                    parse_mode="HTML",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+
+            log(0, state)
+
+        except Exception as e:
+            log(1, e)
+            if menu_msg_id:
+                keyboard = [
+                    [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
+                ]
+    
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=menu_msg_id,
+                    text="Si è verificato un errore durante l'aggiunta dell'aeroporto",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+
+        context.user_data.pop("current_state", None)
+        context.user_data.pop("menu_message_id", None)
+    
+    elif state == "waiting_remove_arrival_id":
+        iata_to_remove = update.message.text.strip()
+        chat_id = update.effective_chat.id
+        menu_msg_id = context.user_data.get("menu_message_id")
+
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+
+        try:
+            with open(data_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            arrival_id = data['arrival_id'].split(',')
+
+            if iata_to_remove in arrival_id:
+                arrival_id.remove(iata_to_remove)
+
+                update_data('arrival_id', ','.join(arrival_id))
+
+                with open(data_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+
+                text = (
+                    f"🛫 <b>Partenze:</b> {', '.join(data['departure_id'].split(','))}\n\n"
+                    f"🛬 <b>Arrivi:</b> {', '.join(data['arrival_id'].split(','))}\n\n"
+                    f"💰 <b>Prezzo max:</b> {data['max_price']} {data['currency']}"
+                )
+
+                keyboard = [
+                    [InlineKeyboardButton("🛫 Modifica partenze", callback_data="update_departure_id")],
+                    [InlineKeyboardButton("🛬 Modifica arrivi", callback_data="update_arrival_id")],
+                    [InlineKeyboardButton("💰 Modifica prezzo", callback_data="update_max_price")]
+                ]
+
+                if menu_msg_id:
+                    await context.bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=menu_msg_id,
+                        text=text,
+                        parse_mode="HTML",
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+
+                log(0, state)
+            else:
+                raise Exception("Value not found in the arrival_id array")
+
+        except Exception as e:
+            log(1, e)
+            if menu_msg_id:
+                keyboard = [
+                    [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
+                ]
+
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=menu_msg_id,
+                    text="Lo IATA indicato non è presente, controllare l'ortografia",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+
+        context.user_data.pop("current_state", None)
+        context.user_data.pop("menu_message_id", None)
+    
     else:
         await update.message.reply_text("Usa i pulsanti o i comandi suggeriti per interagire con il bot")
 
