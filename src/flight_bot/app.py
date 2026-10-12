@@ -17,9 +17,11 @@ CHAT_ID = os.getenv("CHAT_ID")
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    
+    callback = query.data
 
-    # ======= SEARCH =======
-    if query.data == "return_to_menu_search":
+    # ====== SEARCH ======
+    if callback == "return_to_menu_search":
         keyboard = [
             [InlineKeyboardButton("🗓️ Cerca per data", callback_data="search_by_date_0")],
             [InlineKeyboardButton("🛫 Cerca per partenza", callback_data="search_by_departure")],
@@ -29,13 +31,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await query.edit_message_text("Scegli tra queste opzioni di ricerca", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    elif query.data.startswith("search_by_date_"):
+    elif callback.startswith("search_by_date_"):
         flights = get_flights_by('date')
 
         possible_date = list(flights.keys())
 
         index = 5
-        page = int(query.data.split('_')[-1])
+        page = int(callback.split('_')[-1])
         max_page = floor(len(possible_date) / index)
 
         navigation_buttons = []
@@ -72,29 +74,29 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-    elif query.data == "search_by_departure":
+    elif callback == "search_by_departure":
         keyboard = [
             [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]
         ]
 
         await query.edit_message_text("🛫 Ecco a te gli aeroporti di partenza disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    elif query.data == "search_by_arrival":
+    elif callback == "search_by_arrival":
         keyboard = [
             [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]
         ]
 
         await query.edit_message_text("🛬 Ecco a te le destinazioni disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    elif query.data == "search_by_airline":
+    elif callback == "search_by_airline":
         keyboard = [
             [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]
         ]
 
         await query.edit_message_text("️️️👨🏼‍✈️️ Ecco a te le compagnie disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    # ======= FILTERS =======
-    elif query.data == "return_to_menu_filters":
+    # ====== FILTERS ======
+    elif callback == "return_to_menu_filters":
         with open(data_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
@@ -112,8 +114,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    # ------- Departures -------
-    elif query.data == "update_departure_id":
+    # --- Departures ---
+    elif callback == "update_departure_id":
         context.user_data['menu_message_id'] = query.message.message_id
 
         keyboard = [
@@ -124,9 +126,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
         ]
 
-        await query.edit_message_text("Scegli l'azione da eseguire", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.edit_message_text("Partenze: scegli l'azione da eseguire", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    elif query.data == "add_departure_id":
+    elif callback == "add_departure_id":
         context.user_data['current_state'] = "waiting_add_departure_id"
         context.user_data['menu_message_id'] = query.message.message_id
 
@@ -134,9 +136,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
         ]
         
-        await query.edit_message_text("Scrivi il codice IATA dell'aeroporto da inserire", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.edit_message_text("Partenze: scrivi il codice IATA dell'aeroporto da inserire", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    elif query.data == "remove_departure_id":
+    elif callback == "remove_departure_id":
         context.user_data['current_state'] = "waiting_remove_departure_id"
         context.user_data['menu_message_id'] = query.message.message_id
         
@@ -144,9 +146,44 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
         ]
         
-        await query.edit_message_text("Scrivi il codice IATA dell'aeroporto da rimuovere", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.edit_message_text("Partenze: scrivi il codice IATA dell'aeroporto da rimuovere", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    elif query.data == "update_max_price":
+    # --- Arrivals ---
+    elif callback == "update_arrival_id":
+        context.user_data['menu_message_id'] = query.message.message_id
+    
+        keyboard = [
+            [
+                InlineKeyboardButton("➕️ Aggiungi", callback_data="add_arrival_id"),
+                InlineKeyboardButton("➖️ Rimuovi", callback_data="remove_arrival_id")
+            ],
+            [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
+        ]
+    
+        await query.edit_message_text("Arrivi: scegli l'azione da eseguire", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    elif callback == "add_arrival_id":
+        context.user_data['current_state'] = "waiting_add_arrival_id"
+        context.user_data['menu_message_id'] = query.message.message_id
+    
+        keyboard = [
+            [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
+        ]
+    
+        await query.edit_message_text("Arrivi: scrivi il codice IATA dell'aeroporto da inserire", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    elif callback == "remove_arrival_id":
+        context.user_data['current_state'] = "waiting_remove_arrival_id"
+        context.user_data['menu_message_id'] = query.message.message_id
+    
+        keyboard = [
+            [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
+        ]
+    
+        await query.edit_message_text("Arrivi: scrivi il codice IATA dell'aeroporto da rimuovere", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    # --- Max price ---
+    elif callback == "update_max_price":
         context.user_data['current_state'] = "waiting_max_price"
         context.user_data['menu_message_id'] = query.message.message_id
 
@@ -155,8 +192,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
 
         await query.edit_message_text("Scrivi il nuovo prezzo massimo:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-    log(0, query.data)
+    
+    log(0, callback)
 
 # User messagge handler function
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
