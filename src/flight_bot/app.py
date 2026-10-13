@@ -31,6 +31,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await query.edit_message_text("Scegli tra queste opzioni di ricerca", reply_markup=InlineKeyboardMarkup(keyboard))
 
+    # --- Search by date ---
     elif callback.startswith("search_by_date_"):
         flights = get_flights_by('date')
 
@@ -74,6 +75,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
+    # --- Search by departure ---
     elif callback == "search_by_departure":
         with open(data_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -84,15 +86,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append([InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")])
 
         await query.edit_message_text("🛫 Ecco a te gli aeroporti di partenza disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
-
-    elif callback == "search_by_airline":
-        keyboard = [
-            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]
-        ]
-
-        await query.edit_message_text("️️️👨🏼‍✈️️ Ecco a te le compagnie disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
-
-    # --- Search by departure ---
+    
     elif callback.startswith("departure_"):
         with open(data_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -200,6 +194,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    # --- Search by airline ---
+    elif callback == "search_by_airline":
+        keyboard = [
+            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]
+        ]
+
+        await query.edit_message_text("️️️👨🏼‍✈️️ Ecco a te le compagnie disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
 
     # ====== FILTERS ======
     elif callback == "return_to_menu_filters":
