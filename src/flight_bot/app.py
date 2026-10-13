@@ -1,646 +1,220 @@
 import os
-from dotenv import load_dotenv
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
-import json
 import html
-from math import floor
+from functools import wraps
 
-from flight_bot.utils import *
+from dotenv import load_dotenv
+from telegram import InlineKeyboardButton, Update
+from telegram.error import BadRequest
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 
-# Retrieve .env info
+from flight_bot.utils import (
+    InvalidInput,
+    add_iata,
+    airport_picker_view,
+    build_keyboard,
+    cancel_row,
+    check_id,
+    date_view,
+    dates_view,
+    filters_view,
+    flights_page_view,
+    log,
+    parse_price,
+    read_data,
+    remove_iata,
+    search_menu_view,
+    split_ids,
+    update_data
+)
+
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# Buttons handler function
+FIELD_LABELS = {
+    "departure_id": "Partenze",
+    "arrival_id": "Arrivi"
+}
+
+FILTER_STATES = {
+    "waiting_add_departure_id": ("departure_id", add_iata),
+    "waiting_remove_departure_id": ("departure_id", remove_iata),
+    "waiting_add_arrival_id": ("arrival_id", add_iata),
+    "waiting_remove_arrival_id": ("arrival_id", remove_iata)
+}
+
+
+def authorized(func):
+    @wraps(func)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+
+        if user is None or not check_id(user.id, CHAT_ID):
+            log(1, "ID not recognized")
+            return
+
+        return await func(update, context)
+
+    return wrapper
+
+
+def clear_state(context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.pop("current_state", None)
+    context.user_data.pop("menu_message_id", None)
+
+
+async def edit(query, text: str, markup):
+    try:
+        await query.edit_message_text(text, reply_markup=markup, parse_mode="HTML")
+    except BadRequest as e:
+        if "not modified" not in str(e).lower():
+            raise
+
+
+@authorized
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    
+
     callback = query.data
 
-    # ====== SEARCH ======
     if callback == "return_to_menu_search":
-        keyboard = [
-            [InlineKeyboardButton("🗓️ Cerca per data", callback_data="search_by_date_0")],
-            [InlineKeyboardButton("🛫 Cerca per partenza", callback_data="search_by_departure")],
-            [InlineKeyboardButton("🛬 Cerca per destinazione", callback_data="search_by_arrival")],
-            [InlineKeyboardButton("👨🏼‍✈️️ Cerca per compagnia", callback_data="search_by_airline")]
-        ]
-        
-        await query.edit_message_text("Scegli tra queste opzioni di ricerca", reply_markup=InlineKeyboardMarkup(keyboard))
+        await edit(query, *search_menu_view())
 
-    # --- Search by date ---
     elif callback.startswith("search_by_date_"):
-        flights = get_flights_by('date')
+        page = int(callback.rsplit('_', 1)[1])
+        await edit(query, *dates_view(page))
 
-        possible_date = list(flights.keys())
+    elif callback.startswith("date_"):
+        selected_date = callback.split('_', 1)[1]
+        await edit(query, *date_view(selected_date))
 
-        index = 5
-        page = int(callback.split('_')[-1])
-        max_page = floor(len(possible_date) / index)
-
-        navigation_buttons = []
-
-        if page == 1:
-            navigation_buttons = [InlineKeyboardButton("➡️", callback_data=f"search_by_date_{page + 1}")]
-        elif page == max_page:
-            navigation_buttons = [InlineKeyboardButton("⬅️", callback_data=f"search_by_date_{page - 1}")]
-        else:
-            navigation_buttons = [
-                InlineKeyboardButton("⬅️", callback_data=f"search_by_date_{page - 1}"),
-                InlineKeyboardButton("➡️", callback_data=f"search_by_date_{page + 1}")
-            ]
-
-        start_point = (page - 1) * index
-        end_point = start_point + index
-
-        while True:
-            try:
-                to_show = possible_date[start_point:end_point]
-                break
-            except IndexError:
-                end_point -= 1
-                continue
-
-        keyboard = [
-            *[[InlineKeyboardButton(f"🗓️ {d}", callback_data=f"date_{d}")] for d in to_show],
-            navigation_buttons,
-            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]
-        ]
-
-        await query.edit_message_text(
-            f"🗓️ Ecco a te le date disponibili - pagina {page}/{max_page}",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-
-    # --- Search by departure ---
     elif callback == "search_by_departure":
-        with open(data_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            
-        departure_id = data['departure_id'].split(',')
-        
-        keyboard = [[InlineKeyboardButton(f"🛫 {d}", callback_data=f"departure_{d}_1") for d in departure_id]]
-        keyboard.append([InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")])
+        await edit(query, *airport_picker_view("departure"))
 
-        await query.edit_message_text("🛫 Ecco a te gli aeroporti di partenza disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
-    
-    elif callback.startswith("departure_"):
-        with open(data_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-
-        _, departure_airport, page = callback.split('_', 2)
-        page = int(page)
-
-        selected_flights = {}
-        for k, day_flights in data['flights'].items():
-            filtered = [fl for fl in day_flights if fl['departure_airport_id'] == departure_airport]
-            if filtered:
-                selected_flights[k] = filtered
-
-        keys = list(selected_flights)
-        max_page = len(keys)
-
-        if max_page == 0:
-            await query.edit_message_text(
-                f"Nessun volo da {departure_airport}",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]])
-            )
-            return
-
-        navigation_buttons = []
-        
-        if page > 1:
-            navigation_buttons.append(InlineKeyboardButton("⬅️", callback_data=f"departure_{departure_airport}_{page - 1}"))
-        if page < max_page:
-            navigation_buttons.append(InlineKeyboardButton("➡️", callback_data=f"departure_{departure_airport}_{page + 1}"))
-        else:
-            navigation_buttons = [
-                InlineKeyboardButton("⬅️", callback_data=f"departure_{departure_airport}_{page - 1}"),
-                InlineKeyboardButton("➡️", callback_data=f"departure_{departure_airport}_{page + 1}")
-            ]
-
-        keyboard = [
-            navigation_buttons,
-            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]
-        ]
-
-        day = keys[page - 1]
-        text = f"🗓️ <b>{day}</b>\n\n" + '\n'.join(
-            f"✈️ {fl['departure_airport_id']} -> {fl['arrival_airport_id']} a {fl['price']} {data['currency']} - {fl['flight_number']}"
-            for fl in selected_flights[day]
-        )
-
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-
-    # --- Search by arrival ---
     elif callback == "search_by_arrival":
-        with open(data_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        arrival_id = data['arrival_id'].split(',')
-        
-        keyboard = [[InlineKeyboardButton(f"🛬 {d}", callback_data=f"arrival_{d}_1")] for d in arrival_id]
-        keyboard.append([InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")])
-        
-        await query.edit_message_text("🛬 Ecco a te gli aeroporti di arrivo disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
+        await edit(query, *airport_picker_view("arrival"))
 
-    elif callback.startswith("arrival_"):
-        with open(data_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+    elif callback.startswith(("departure_", "arrival_")):
+        field, code, page = callback.split('_', 2)
+        await edit(query, *flights_page_view(field, code, int(page)))
 
-        _, arrival_airport, page = callback.split('_')
-        page = int(page)
-
-        selected_flights = {}
-        for k, day_flights in data['flights'].items():
-            filtered = [fl for fl in day_flights if fl['arrival_airport_id'] == arrival_airport]
-            if filtered:
-                selected_flights[k] = filtered
-
-        keys = list(selected_flights)
-        max_page = len(keys)
-
-        if max_page == 0:
-            await query.edit_message_text(
-                f"Nessun volo da {arrival_airport}",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]])
-            )
-            return
-
-        navigation_buttons = []
-
-        if page > 1:
-            navigation_buttons.append(InlineKeyboardButton("⬅️", callback_data=f"arrival_{arrival_airport}_{page - 1}"))
-        if page < max_page:
-            navigation_buttons.append(InlineKeyboardButton("➡️", callback_data=f"arrival_{arrival_airport}_{page + 1}"))
-        else:
-            navigation_buttons = [
-                InlineKeyboardButton("⬅️", callback_data=f"arrival_{arrival_airport}_{page - 1}"),
-                InlineKeyboardButton("➡️", callback_data=f"arrival_{arrival_airport}_{page + 1}")
-            ]
-
-        keyboard = [
-            navigation_buttons,
-            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]
-        ]
-
-        day = keys[page - 1]
-        text = f"🗓️ <b>{day}</b>\n\n" + '\n'.join(
-            f"✈️ {fl['departure_airport_id']} -> {fl['arrival_airport_id']} a {fl['price']} {data['currency']} - {fl['flight_number']}"
-            for fl in selected_flights[day]
-        )
-
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-
-    # ====== FILTERS ======
     elif callback == "return_to_menu_filters":
-        with open(data_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        text = (
-            f"🛫 <b>Partenze:</b> {', '.join(data['departure_id'].split(','))}\n\n"
-            f"🛬 <b>Arrivi:</b> {', '.join(data['arrival_id'].split(','))}\n\n"
-            f"💰 <b>Prezzo max:</b> {data['max_price']} {data['currency']}"
+        clear_state(context)
+        await edit(query, *filters_view(read_data()))
+
+    elif callback in ("update_departure_id", "update_arrival_id"):
+        field = callback.removeprefix("update_")
+
+        context.user_data.pop("current_state", None)
+        context.user_data['menu_message_id'] = query.message.message_id
+
+        keyboard = build_keyboard(
+            [
+                InlineKeyboardButton("➕️ Aggiungi", callback_data=f"add_{field}"),
+                InlineKeyboardButton("➖️ Rimuovi", callback_data=f"remove_{field}")
+            ],
+            cancel_row()
         )
-        
-        keyboard = [
-            [InlineKeyboardButton("🛫 Modifica partenze", callback_data="update_departure_id")],
-            [InlineKeyboardButton("🛬 Modifica arrivi", callback_data="update_arrival_id")],
-            [InlineKeyboardButton("💰 Modifica prezzo", callback_data="update_max_price")]
-        ]
-        
-        await query.edit_message_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    # --- Departures ---
-    elif callback == "update_departure_id":
+        await edit(query, f"{FIELD_LABELS[field]}: scegli l'azione da eseguire", keyboard)
+
+    elif callback in ("add_departure_id", "remove_departure_id", "add_arrival_id", "remove_arrival_id"):
+        action, field = callback.split('_', 1)
+        verb = "inserire" if action == "add" else "rimuovere"
+
+        context.user_data['current_state'] = f"waiting_{callback}"
         context.user_data['menu_message_id'] = query.message.message_id
 
-        keyboard = [
-            [
-                InlineKeyboardButton("➕️ Aggiungi", callback_data="add_departure_id"),
-                InlineKeyboardButton("➖️ Rimuovi", callback_data="remove_departure_id")
-            ],
-            [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
-        ]
+        await edit(
+            query,
+            f"{FIELD_LABELS[field]}: scrivi il codice IATA dell'aeroporto da {verb}",
+            build_keyboard(cancel_row())
+        )
 
-        await query.edit_message_text("Partenze: scegli l'azione da eseguire", reply_markup=InlineKeyboardMarkup(keyboard))
-
-    elif callback == "add_departure_id":
-        context.user_data['current_state'] = "waiting_add_departure_id"
-        context.user_data['menu_message_id'] = query.message.message_id
-
-        keyboard = [
-            [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
-        ]
-        
-        await query.edit_message_text("Partenze: scrivi il codice IATA dell'aeroporto da inserire", reply_markup=InlineKeyboardMarkup(keyboard))
-
-    elif callback == "remove_departure_id":
-        context.user_data['current_state'] = "waiting_remove_departure_id"
-        context.user_data['menu_message_id'] = query.message.message_id
-        
-        keyboard = [
-            [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
-        ]
-        
-        await query.edit_message_text("Partenze: scrivi il codice IATA dell'aeroporto da rimuovere", reply_markup=InlineKeyboardMarkup(keyboard))
-
-    # --- Arrivals ---
-    elif callback == "update_arrival_id":
-        context.user_data['menu_message_id'] = query.message.message_id
-    
-        keyboard = [
-            [
-                InlineKeyboardButton("➕️ Aggiungi", callback_data="add_arrival_id"),
-                InlineKeyboardButton("➖️ Rimuovi", callback_data="remove_arrival_id")
-            ],
-            [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
-        ]
-    
-        await query.edit_message_text("Arrivi: scegli l'azione da eseguire", reply_markup=InlineKeyboardMarkup(keyboard))
-    
-    elif callback == "add_arrival_id":
-        context.user_data['current_state'] = "waiting_add_arrival_id"
-        context.user_data['menu_message_id'] = query.message.message_id
-    
-        keyboard = [
-            [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
-        ]
-    
-        await query.edit_message_text("Arrivi: scrivi il codice IATA dell'aeroporto da inserire", reply_markup=InlineKeyboardMarkup(keyboard))
-    
-    elif callback == "remove_arrival_id":
-        context.user_data['current_state'] = "waiting_remove_arrival_id"
-        context.user_data['menu_message_id'] = query.message.message_id
-    
-        keyboard = [
-            [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
-        ]
-    
-        await query.edit_message_text("Arrivi: scrivi il codice IATA dell'aeroporto da rimuovere", reply_markup=InlineKeyboardMarkup(keyboard))
-    
-    # --- Max price ---
     elif callback == "update_max_price":
         context.user_data['current_state'] = "waiting_max_price"
         context.user_data['menu_message_id'] = query.message.message_id
 
-        keyboard = [
-            [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
-        ]
+        await edit(query, "Scrivi il nuovo prezzo massimo:", build_keyboard(cancel_row()))
 
-        await query.edit_message_text("Scrivi il nuovo prezzo massimo:", reply_markup=InlineKeyboardMarkup(keyboard))
-    
     log(0, callback)
 
-# User messagge handler function
+
+@authorized
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = context.user_data.get("current_state")
 
-    if state == "waiting_add_departure_id":
-        new_iata = update.message.text.strip()
-        chat_id = update.effective_chat.id
-        menu_msg_id = context.user_data.get("menu_message_id")
-
-        try:
-            await update.message.delete()
-        except Exception:
-            pass
-
-        try:
-            with open(data_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-
-            departure_id = data['departure_id'].split(',')
-
-            departure_id.append(new_iata)
-
-            update_data('departure_id', ','.join(departure_id))
-
-            with open(data_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            
-            text = (
-                f"🛫 <b>Partenze:</b> {', '.join(data['departure_id'].split(','))}\n\n"
-                f"🛬 <b>Arrivi:</b> {', '.join(data['arrival_id'].split(','))}\n\n"
-                f"💰 <b>Prezzo max:</b> {data['max_price']} {data['currency']}"
-            )
-            
-            keyboard = [
-                [InlineKeyboardButton("🛫 Modifica partenze", callback_data="update_departure_id")],
-                [InlineKeyboardButton("🛬 Modifica arrivi", callback_data="update_arrival_id")],
-                [InlineKeyboardButton("💰 Modifica prezzo", callback_data="update_max_price")]
-            ]
-            
-            if menu_msg_id:
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=menu_msg_id,
-                    text=text,
-                    parse_mode="HTML",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-
-            log(0, state)
-
-        except Exception as e:
-            log(1, e)
-            if menu_msg_id:
-                keyboard = [
-                    [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
-                ]
-    
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=menu_msg_id,
-                    text="Si è verificato un errore durante l'aggiunta dell'aeroporto",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-
-        context.user_data.pop("current_state", None)
-        context.user_data.pop("menu_message_id", None)
-
-    elif state == "waiting_remove_departure_id":
-        iata_to_remove = update.message.text.strip()
-        chat_id = update.effective_chat.id
-        menu_msg_id = context.user_data.get("menu_message_id")
-
-        try:
-            await update.message.delete()
-        except Exception:
-            pass
-
-        try:
-            with open(data_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-
-            departure_id = data['departure_id'].split(',')
-
-            if iata_to_remove in departure_id:
-                departure_id.remove(iata_to_remove)
-
-                update_data('departure_id', ','.join(departure_id))
-
-                with open(data_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-
-                text = (
-                    f"🛫 <b>Partenze:</b> {', '.join(data['departure_id'].split(','))}\n\n"
-                    f"🛬 <b>Arrivi:</b> {', '.join(data['arrival_id'].split(','))}\n\n"
-                    f"💰 <b>Prezzo max:</b> {data['max_price']} {data['currency']}"
-                )
-
-                keyboard = [
-                    [InlineKeyboardButton("🛫 Modifica partenze", callback_data="update_departure_id")],
-                    [InlineKeyboardButton("🛬 Modifica arrivi", callback_data="update_arrival_id")],
-                    [InlineKeyboardButton("💰 Modifica prezzo", callback_data="update_max_price")]
-                ]
-
-                if menu_msg_id:
-                    await context.bot.edit_message_text(
-                        chat_id=chat_id,
-                        message_id=menu_msg_id,
-                        text=text,
-                        parse_mode="HTML",
-                        reply_markup=InlineKeyboardMarkup(keyboard)
-                    )
-
-                log(0, state)
-            else:
-                raise Exception("Value not found in the departure_id array")
-
-        except Exception as e:
-            log(1, e)
-            if menu_msg_id:
-                keyboard = [
-                    [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
-                ]
-
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=menu_msg_id,
-                    text="Lo IATA indicato non è presente, controllare l'ortografia",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-
-        context.user_data.pop("current_state", None)
-        context.user_data.pop("menu_message_id", None)
-    
-    elif state == "waiting_add_arrival_id":
-        new_iata = update.message.text.strip()
-        chat_id = update.effective_chat.id
-        menu_msg_id = context.user_data.get("menu_message_id")
-
-        try:
-            await update.message.delete()
-        except Exception:
-            pass
-
-        try:
-            with open(data_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-
-            arrival_id = data['arrival_id'].split(',')
-
-            arrival_id.append(new_iata)
-
-            update_data('arrival_id', ','.join(arrival_id))
-
-            with open(data_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            
-            text = (
-                f"🛫 <b>Partenze:</b> {', '.join(data['departure_id'].split(','))}\n\n"
-                f"🛬 <b>Arrivi:</b> {', '.join(data['arrival_id'].split(','))}\n\n"
-                f"💰 <b>Prezzo max:</b> {data['max_price']} {data['currency']}"
-            )
-            
-            keyboard = [
-                [InlineKeyboardButton("🛫 Modifica partenze", callback_data="update_departure_id")],
-                [InlineKeyboardButton("🛬 Modifica arrivi", callback_data="update_arrival_id")],
-                [InlineKeyboardButton("💰 Modifica prezzo", callback_data="update_max_price")]
-            ]
-            
-            if menu_msg_id:
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=menu_msg_id,
-                    text=text,
-                    parse_mode="HTML",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-
-            log(0, state)
-
-        except Exception as e:
-            log(1, e)
-            if menu_msg_id:
-                keyboard = [
-                    [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
-                ]
-    
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=menu_msg_id,
-                    text="Si è verificato un errore durante l'aggiunta dell'aeroporto",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-
-        context.user_data.pop("current_state", None)
-        context.user_data.pop("menu_message_id", None)
-    
-    elif state == "waiting_remove_arrival_id":
-        iata_to_remove = update.message.text.strip()
-        chat_id = update.effective_chat.id
-        menu_msg_id = context.user_data.get("menu_message_id")
-
-        try:
-            await update.message.delete()
-        except Exception:
-            pass
-
-        try:
-            with open(data_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-
-            arrival_id = data['arrival_id'].split(',')
-
-            if iata_to_remove in arrival_id:
-                arrival_id.remove(iata_to_remove)
-
-                update_data('arrival_id', ','.join(arrival_id))
-
-                with open(data_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-
-                text = (
-                    f"🛫 <b>Partenze:</b> {', '.join(data['departure_id'].split(','))}\n\n"
-                    f"🛬 <b>Arrivi:</b> {', '.join(data['arrival_id'].split(','))}\n\n"
-                    f"💰 <b>Prezzo max:</b> {data['max_price']} {data['currency']}"
-                )
-
-                keyboard = [
-                    [InlineKeyboardButton("🛫 Modifica partenze", callback_data="update_departure_id")],
-                    [InlineKeyboardButton("🛬 Modifica arrivi", callback_data="update_arrival_id")],
-                    [InlineKeyboardButton("💰 Modifica prezzo", callback_data="update_max_price")]
-                ]
-
-                if menu_msg_id:
-                    await context.bot.edit_message_text(
-                        chat_id=chat_id,
-                        message_id=menu_msg_id,
-                        text=text,
-                        parse_mode="HTML",
-                        reply_markup=InlineKeyboardMarkup(keyboard)
-                    )
-
-                log(0, state)
-            else:
-                raise Exception("Value not found in the arrival_id array")
-
-        except Exception as e:
-            log(1, e)
-            if menu_msg_id:
-                keyboard = [
-                    [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
-                ]
-
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=menu_msg_id,
-                    text="Lo IATA indicato non è presente, controllare l'ortografia",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-
-        context.user_data.pop("current_state", None)
-        context.user_data.pop("menu_message_id", None)
-    
-    elif state == "waiting_max_price":
-        new_max_price = update.message.text.strip()
-        chat_id = update.effective_chat.id
-        menu_msg_id = context.user_data.get("menu_message_id")
-
-        try:
-            await update.message.delete()
-        except Exception:
-            pass
-
-        try:
-            update_data('max_price', float(new_max_price))
-
-            with open(data_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-
-            text = (
-                f"🛫 <b>Partenze:</b> {', '.join(data['departure_id'].split(','))}\n\n"
-                f"🛬 <b>Arrivi:</b> {', '.join(data['arrival_id'].split(','))}\n\n"
-                f"💰 <b>Prezzo max:</b> {data['max_price']} {data['currency']}"
-            )
-            
-            keyboard = [
-                [InlineKeyboardButton("🛫 Modifica partenze", callback_data="update_departure_id")],
-                [InlineKeyboardButton("🛬 Modifica arrivi", callback_data="update_arrival_id")],
-                [InlineKeyboardButton("💰 Modifica prezzo", callback_data="update_max_price")]
-            ]
-
-            if menu_msg_id:
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=menu_msg_id,
-                    text=text,
-                    parse_mode="HTML",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-
-            log(0, state)
-
-        except Exception as e:
-            log(1, e)
-            if menu_msg_id:
-                keyboard = [
-                    [InlineKeyboardButton("❌ Annulla", callback_data="return_to_menu_filters")]
-                ]
-
-                await context.bot.edit_message_text(
-                    chat_id=chat_id,
-                    message_id=menu_msg_id,
-                    text="Si è verificato un errore durante il salvataggio del prezzo",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-
-        context.user_data.pop("current_state", None)
-        context.user_data.pop("menu_message_id", None)
-    
-    else:
+    if state is None:
         await update.message.reply_text("Usa i pulsanti o i comandi suggeriti per interagire con il bot")
-
-# Commands functions
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
-    if not check_id(user_id, CHAT_ID):
-        log(1, "ID not recognized")
         return
-    
+
+    chat_id = update.effective_chat.id
+    menu_msg_id = context.user_data.get("menu_message_id")
+    text = update.message.text.strip()
+
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
+    keep_state = False
+
+    try:
+        if state == "waiting_max_price":
+            update_data('max_price', parse_price(text))
+        else:
+            field, apply = FILTER_STATES[state]
+            values = apply(split_ids(read_data()[field]), text)
+            update_data(field, ','.join(values))
+
+        view_text, markup = filters_view(read_data())
+        log(0, state)
+
+    except InvalidInput as e:
+        log(1, e)
+        keep_state = True
+        view_text = html.escape(str(e))
+        markup = build_keyboard(cancel_row())
+
+    except Exception as e:
+        log(1, e)
+        view_text = "Si è verificato un errore durante il salvataggio"
+        markup = build_keyboard(cancel_row())
+
+    if not keep_state:
+        clear_state(context)
+
+    if menu_msg_id:
+        try:
+            await context.bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=menu_msg_id,
+                text=view_text,
+                parse_mode="HTML",
+                reply_markup=markup
+            )
+        except BadRequest as e:
+            log(1, e)
+    else:
+        await context.bot.send_message(chat_id=chat_id, text=view_text, parse_mode="HTML", reply_markup=markup)
+
+
+@authorized
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = update.effective_user.first_name
 
     await update.message.reply_text(f"Ciao {name}!\nBenvenuto nella ricerca dei viaggi a poco prezzo!")
 
     log(0)
 
-async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
 
-    if not check_id(user_id, CHAT_ID):
-        log(1, "ID not recognized")
-        return
-
+@authorized
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "🔹️ /start - Fa partire il bot\n"
         "🔹️ /help - Mostra questa lista di comandi\n"
-        "🔹️ /filters - Mostra la lista di filtri su cui si basa la ricerca\n",
+        "🔹️ /filters - Mostra la lista di filtri su cui si basa la ricerca\n"
         "🔹️ /search - Fa partire la ricerca"
     )
 
@@ -648,74 +222,48 @@ async def help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     log(0)
 
+
+@authorized
 async def get_filters(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-
-    if not check_id(user_id, CHAT_ID):
-        log(1, "ID not recognized")
-        return
-
     try:
-        with open(data_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+        text, markup = filters_view(read_data())
 
-        text = (
-            f"🛫 <b>Partenze:</b> {', '.join(data['departure_id'].split(','))}\n\n"
-            f"🛬 <b>Arrivi:</b> {', '.join(data['arrival_id'].split(','))}\n\n"
-            f"💰 <b>Prezzo max:</b> {data['max_price']} {data['currency']}"
-        )
+        await update.message.reply_text(text, parse_mode="HTML", reply_markup=markup)
 
-        keyboard = [
-            [InlineKeyboardButton("🛫 Modifica partenze", callback_data="update_departure_id")],
-            [InlineKeyboardButton("🛬 Modifica arrivi", callback_data="update_arrival_id")],
-            [InlineKeyboardButton("💰 Modifica prezzo", callback_data="update_max_price")]
-        ]
-
-        await update.message.reply_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
-        
         log(0)
     except Exception as e:
         log(1, e)
-        return
 
+
+@authorized
 async def search_flights(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    
-    if not check_id(user_id, CHAT_ID):
-        log(1, "ID not recognized")
-        return
-
     try:
-        keyboard = [
-            [InlineKeyboardButton("🗓️ Cerca per data", callback_data="search_by_date_1")],
-            [InlineKeyboardButton("🛫 Cerca per partenza", callback_data="search_by_departure")],
-            [InlineKeyboardButton("🛬 Cerca per destinazione", callback_data="search_by_arrival")]
-        ]
+        text, markup = search_menu_view()
 
-        await update.message.reply_text("Scegli tra queste opzioni di ricerca", reply_markup=InlineKeyboardMarkup(keyboard))
+        await update.message.reply_text(text, reply_markup=markup)
 
         log(0)
     except Exception as e:
         log(1, e)
-        return
+
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    log(1, context.error)
+
 
 def run():
-    # Create the app for the bot with the token
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Add the handlers
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help))
+    app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("filters", get_filters))
     app.add_handler(CommandHandler("search", search_flights))
 
-    # Add the button handler
     app.add_handler(CallbackQueryHandler(button_handler))
 
-    # Add the message handler
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
+    app.add_error_handler(error_handler)
 
-    # Start the polling waiting
     log(0, "Bot ready for messages ...")
     app.run_polling()
