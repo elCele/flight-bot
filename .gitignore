@@ -8,9 +8,12 @@ wheels/
 
 # Log files
 log.txt
+*.log
 
 # Data files
 *.json
+!data.example.json
+*.tmp
 
 # Virtual environments
 .venv

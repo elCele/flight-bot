@@ -1,0 +1,7 @@
+{
+    "departure_id": "TRN,MXP,BGY",
+    "arrival_id": "MAD,BCN,FCO",
+    "max_price": 50,
+    "currency": "EUR",
+    "flights": {}
+}
