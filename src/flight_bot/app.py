@@ -85,13 +85,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.edit_message_text("🛫 Ecco a te gli aeroporti di partenza disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    elif callback == "search_by_arrival":
-        keyboard = [
-            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]
-        ]
-
-        await query.edit_message_text("🛬 Ecco a te le destinazioni disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
-
     elif callback == "search_by_airline":
         keyboard = [
             [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]
@@ -133,6 +126,66 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             navigation_buttons = [
                 InlineKeyboardButton("⬅️", callback_data=f"departure_{departure_airport}_{page - 1}"),
                 InlineKeyboardButton("➡️", callback_data=f"departure_{departure_airport}_{page + 1}")
+            ]
+
+        keyboard = [
+            navigation_buttons,
+            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]
+        ]
+
+        day = keys[page - 1]
+        text = f"🗓️ <b>{day}</b>\n\n" + '\n'.join(
+            f"✈️ {fl['departure_airport_id']} -> {fl['arrival_airport_id']} a {fl['price']} {data['currency']} - {fl['flight_number']}"
+            for fl in selected_flights[day]
+        )
+
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
+
+    # --- Search by arrival ---
+    elif callback == "search_by_arrival":
+        with open(data_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        arrival_id = data['arrival_id'].split(',')
+        
+        keyboard = [[InlineKeyboardButton(f"🛬 {d}", callback_data=f"arrival_{d}_1")] for d in arrival_id]
+        keyboard.append([InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")])
+        
+        await query.edit_message_text("🛬 Ecco a te gli aeroporti di arrivo disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif callback.startswith("arrival_"):
+        with open(data_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        _, arrival_airport, page = callback.split('_')
+        page = int(page)
+
+        selected_flights = {}
+        for k, day_flights in data['flights'].items():
+            filtered = [fl for fl in day_flights if fl['arrival_airport_id'] == arrival_airport]
+            if filtered:
+                selected_flights[k] = filtered
+
+        keys = list(selected_flights)
+        max_page = len(keys)
+
+        if max_page == 0:
+            await query.edit_message_text(
+                f"Nessun volo da {arrival_airport}",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]])
+            )
+            return
+
+        navigation_buttons = []
+
+        if page > 1:
+            navigation_buttons.append(InlineKeyboardButton("⬅️", callback_data=f"arrival_{arrival_airport}_{page - 1}"))
+        if page < max_page:
+            navigation_buttons.append(InlineKeyboardButton("➡️", callback_data=f"arrival_{arrival_airport}_{page + 1}"))
+        else:
+            navigation_buttons = [
+                InlineKeyboardButton("⬅️", callback_data=f"arrival_{arrival_airport}_{page - 1}"),
+                InlineKeyboardButton("➡️", callback_data=f"arrival_{arrival_airport}_{page + 1}")
             ]
 
         keyboard = [
