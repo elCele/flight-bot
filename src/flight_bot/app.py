@@ -195,14 +195,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
 
-    # --- Search by airline ---
-    elif callback == "search_by_airline":
-        keyboard = [
-            [InlineKeyboardButton("🏠️ Torna al menù", callback_data="return_to_menu_search")]
-        ]
-
-        await query.edit_message_text("️️️👨🏼‍✈️️ Ecco a te le compagnie disponibili", reply_markup=InlineKeyboardMarkup(keyboard))
-
     # ====== FILTERS ======
     elif callback == "return_to_menu_filters":
         with open(data_path, 'r', encoding='utf-8') as f:
@@ -697,8 +689,7 @@ async def search_flights(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [InlineKeyboardButton("🗓️ Cerca per data", callback_data="search_by_date_1")],
             [InlineKeyboardButton("🛫 Cerca per partenza", callback_data="search_by_departure")],
-            [InlineKeyboardButton("🛬 Cerca per destinazione", callback_data="search_by_arrival")],
-            [InlineKeyboardButton("👨🏼‍✈️️ Cerca per compagnia", callback_data="search_by_airline")]
+            [InlineKeyboardButton("🛬 Cerca per destinazione", callback_data="search_by_arrival")]
         ]
 
         await update.message.reply_text("Scegli tra queste opzioni di ricerca", reply_markup=InlineKeyboardMarkup(keyboard))
