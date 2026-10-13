@@ -239,7 +239,7 @@ def date_view(selected_date: str) -> tuple:
     if not day_flights:
         return f"Nessun volo il {html.escape(selected_date)}", build_keyboard(home_row())
 
-    header = f"🗓️ <b>{html.escape(selected_date)}</b>\n"
+    header = f"🗓️ <b>{html.escape(selected_date)}</b>{updated_label(data, selected_date)}\n"
     lines = [flight_line(fl, data['currency']) for fl in day_flights]
 
     return join_lines(header, lines), build_keyboard(home_row())
@@ -278,9 +278,22 @@ def flights_page_view(field: str, code: str, page: int) -> tuple:
     page = min(max(page, 1), max_page)
     day = days[page - 1]
 
-    header = f"🗓️ <b>{html.escape(day)}</b> - pagina {page}/{max_page}\n"
+    header = f"🗓️ <b>{html.escape(day)}</b> - pagina {page}/{max_page}{updated_label(data, day)}\n"
     lines = [flight_line(fl, data['currency']) for fl in selected[day]]
 
     markup = build_keyboard(nav_row(f"{field}_{code}", page, max_page), home_row())
 
     return join_lines(header, lines), markup
+
+def updated_label(data: dict, day: str) -> str:
+    updated = data.get('updated_at', {}).get(day)
+
+    if not updated:
+        return ""
+
+    try:
+        updated = date.fromisoformat(updated).strftime('%d/%m')
+    except ValueError:
+        pass
+
+    return f" (agg. {html.escape(updated)})"
